@@ -27,6 +27,7 @@ import ecdsa
 import hashlib
 import bech32
 from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins
+from Crypto.Hash import RIPEMD160
 
 GRPC = scrtxxs.GRPC
 SSL = scrtxxs.SSL
@@ -43,7 +44,7 @@ class IBCSend():
             privkey_obj = ecdsa.SigningKey.from_string(bip44_def_ctx.PrivateKey().Raw().ToBytes(), curve=ecdsa.SECP256k1)
             pubkey  = privkey_obj.get_verifying_key()
             s = hashlib.new("sha256", pubkey.to_string("compressed")).digest()
-            r = hashlib.new("ripemd160", s).digest()
+            r = self.ripemd160(s)
             five_bit_r = bech32.convertbits(r, 8, 5)
             account_address = bech32.bech32_encode("sent", five_bit_r)
             print(account_address)
@@ -62,7 +63,19 @@ class IBCSend():
         self.logfile = open(path.join(scrtxxs.KeyringDIR, "ibc.log"), "a+")
         now = datetime.now()
         self.logfile.write(f"\n---------------------------{now}---------------------------\n")
-        
+    
+    def ripemd160(self, contents: bytes) -> bytes:
+        """
+        Get ripemd160 hash using PyCryptodome.
+    
+        :param contents: bytes contents.
+    
+        :return: bytes ripemd160 hash.
+        """
+        h = RIPEMD160.new()
+        h.update(contents)
+        return h.digest()
+    
     def __keyring(self, keyring_passphrase: str):
         if not path.isdir(scrtxxs.KeyringDIR):
             mkdir(scrtxxs.KeyringDIR)
