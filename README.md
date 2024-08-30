@@ -37,22 +37,42 @@ python3 ibcsend.py --help
 Which shows
 
 ```shell
-(ibc) freQniK>python3 ibcsend.py --help
-You need to specifiy a recipient address, an amount in dvpn, and a relayer channel no.
-usage: ibcsend.py [-h] [--seed] [--channel channel] [-r address] [-a dvpn]
+(ibc) freQniK>python3 ibcsend.py -h
+usage: ibcsend.py [-h] [--seed] [--osmosis] [--channel channel] [--balance] [-r address] [-a dvpn]
 
-You down with IBC - Meile IBC Send - by freQniK - version: 20240818.0129
+You down with IBC - Meile IBC Send - by freQniK - version: 20240830.0136
 
 options:
   -h, --help            show this help message and exit
   --seed                If a seed phrase is present in scrtxxs.py
+  --osmosis             Autosend to Osmosis address on same private key
   --channel channel     channel number of the relayer, Osmosis: 0, Cosmos: 12, Secret: 50, Archway: 92
+  --balance             Get DVPN Balance of wallet
   -r address, --receiver address
                         address on receiving chain to send to
   -a dvpn, --amount dvpn
-                        dvpn to ibc send
 
 ```
+
+If you are using a new wallet that wasn't added the the keyring, edit **scrtxxs.py** with your seedphrase and use the **--seed** flag when running ibcsend.py. The **--seed** flag is in addition to other flags and will conduct an ibc transfer with your given flags on the wallet of the provided seedphrase. 
+
+
+
+Once your wallet is added the keyring you can issue an ibcsend directly to your osmosis account on the same wallet, e.g.
+
+```shell
+python3 ibcsend.py --osmosis -a 1337
+```
+
+You can check your wallet balance (dvpn) by issuing
+
+```shell
+python3 ibcsend.py --balance
+```
+
+When changing wallets that are already stored in the keyring, you just need to edit **WalletName** in the **scrtxxs.py** file to run any command with ibcsend.
+
+
 
 # Keyring & Logfile:
 

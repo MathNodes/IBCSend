@@ -24,5 +24,6 @@ WalletName         = ""
 HotWalletPW        = ""
 WalletSeed         = ""
 GRPC               = "grpc.ungovernable.dev:443"
+API                = "https://api.sentinel.mathnodes.com"
 SSL                = True
         

@@ -4,6 +4,8 @@ import time
 import requests
 import argparse
 import sys
+import binascii
+import random
 
 import scrtxxs
 
@@ -13,6 +15,7 @@ from datetime import datetime
 
 from mospy import Account, Transaction
 from mospy.clients import HTTPClient, GRPCClient
+from mospy.utils import privkey_to_address
 
 from sentinel_protobuf.ibc.applications.transfer.v1.tx_pb2 import MsgTransfer
 from sentinel_protobuf.cosmos.base.v1beta1.coin_pb2 import Coin
@@ -30,9 +33,10 @@ from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins
 from Crypto.Hash import RIPEMD160
 
 GRPC = scrtxxs.GRPC
+API = scrtxxs.API
 SSL = scrtxxs.SSL
 SATOSHI = 1000000
-VERSION = 20240818.0129
+VERSION = 20240830.0136
 
 class IBCSend():
     def __init__(self, keyring_passphrase, wallet_name, seed_phrase = None):
@@ -55,14 +59,13 @@ class IBCSend():
                 
         
         private_key = self.keyring.get_password("meile-ibc", self.wallet_name)
-        
+        self.osmosis_address = privkey_to_address(binascii.unhexlify(private_key), hrp="osmo")
+        self.atom_address = privkey_to_address(binascii.unhexlify(private_key), hrp="cosmos")
         self.grpcaddr, self.grpcport = GRPC.split(":")
         
         self.sdk = SDKInstance(self.grpcaddr, int(self.grpcport), secret=private_key, ssl=SSL)
         
         self.logfile = open(path.join(scrtxxs.KeyringDIR, "ibc.log"), "a+")
-        now = datetime.now()
-        self.logfile.write(f"\n---------------------------{now}---------------------------\n")
     
     def ripemd160(self, contents: bytes) -> bytes:
         """
@@ -87,6 +90,9 @@ class IBCSend():
         return kr 
 
     def Send(self, recipient: str, amt: int, channel: str):
+        now = datetime.now()
+        self.logfile.write(f"\n---------------------------{now}---------------------------\n")
+        self.logfile.flush()
         # query and set the account parameters
         self.sdk._client.load_account_data(account=self.sdk._account)
 
@@ -114,13 +120,13 @@ class IBCSend():
         
         fee = Coin(
                     denom="udvpn",
-                    amount="20000"
+                    amount="31415"
                 )
         
         tx = Transaction(
             account=self.sdk._account,
             fee=fee, # Alterntive: tx.fee.CopyFrom(fee)
-            gas=150000,
+            gas=random.randint(175000, 314159),
             chain_id="sentinelhub-2"
         )
         
@@ -136,6 +142,7 @@ class IBCSend():
             print("code", rpc_error.code())
             print("debug_error_string", rpc_error.debug_error_string())
             self.logfile.write("[sp]: RPC ERROR. ")
+            self.logfile.flush()
             return False
         
         if tx.get("log", None) is None:
@@ -144,6 +151,7 @@ class IBCSend():
             
             message = f"Succefully sent {amt}udvpn at height: {tx_height} to {recipient}, tx: {tx['hash']}" if tx.get("log", None) is None else tx["log"]
             self.logfile.write(f"[sp]: {message}\n")
+            self.logfile.flush()
             print(tx_response)
             print(tx_height)
             return True
@@ -151,21 +159,37 @@ class IBCSend():
         else:
             print("HI")
             print(tx.get("log"))
+            
+    def get_balance(self, address):
+        CoinDict = {'dvpn' : 0, 'scrt' : 0, 'dec'  : 0, 'atom' : 0, 'osmo' : 0}
+        #CoinDict = {'tsent' : 0, 'scrt' : 0, 'dec'  : 0, 'atom' : 0, 'osmo' : 0}
+        endpoint = "/bank/balances/" + address
+        try:
+            r = requests.get(API + endpoint)
+            coinJSON = r.json()
+        except:
+            return None
+            
+        #print(coinJSON)
+        try:
+            for coin in coinJSON['result']:
+                if "udvpn" in coin['denom']:
+                    CoinDict['dvpn'] = int(coin['amount']) 
+        except Exception as e:
+            print(str(e))
+            return None
+        return CoinDict
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"You down with IBC - Meile IBC Send - by freQniK - version: {VERSION}")
     parser.add_argument('--seed', action='store_true', default=False, help='If a seed phrase is present in scrtxxs.py')
+    parser.add_argument('--osmosis', action='store_true', default=False, help='Autosend to Osmosis address on same private key')
     parser.add_argument('--channel', help="channel number of the relayer, Osmosis: 0, Cosmos: 12, Secret: 50, Archway: 92", metavar="channel")
+    parser.add_argument('--balance', action='store_true', default=False, help='Get DVPN Balance of wallet')
     parser.add_argument('-r', '--receiver', help="address on receiving chain to send to", metavar="address")
     parser.add_argument('-a', '--amount', help="dvpn to ibc send", metavar="dvpn")
     
     args = parser.parse_args()
-    
-    
-    if not args.receiver or not args.amount or not args.channel:
-        print("You need to specifiy a recipient address, an amount in dvpn, and a relayer channel no.")
-        parser.print_help()
-        sys.exit(0)
     
     if args.seed:
         ibc = IBCSend(keyring_passphrase=scrtxxs.HotWalletPW,
@@ -178,7 +202,23 @@ if __name__ == "__main__":
                       wallet_name=scrtxxs.WalletName, 
                       seed_phrase=None
                       )
-
+    if args.balance:
+        balance = ibc.get_balance(ibc.sdk._account.address)
+        wallet_balance = float(int(balance.get("dvpn", 0)) / SATOSHI)
+        
+        print(f"Balance: {wallet_balance} dvpn")
+        sys.exit(0)
     
-    ibc.Send(args.receiver, int(float(args.amount) * SATOSHI), str(args.channel))
+    if args.osmosis:
+        print(ibc.osmosis_address)
+        time.sleep(10)
+        ibc.Send(ibc.osmosis_address, int(float(args.amount) * SATOSHI), str(0))
+    else:
+        if not args.receiver or not args.amount or not args.channel:
+            print("You need to specifiy a recipient address, an amount in dvpn, and a relayer channel no.")
+            parser.print_help()
+            sys.exit(0)
+        else:
+            ibc.Send(args.receiver, int(float(args.amount) * SATOSHI), str(args.channel))
+    
     
